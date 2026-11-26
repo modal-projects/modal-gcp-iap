@@ -1,0 +1,13 @@
+[project]
+name = "mlflow-iap-auth"
+version = "0.1.0"
+description = "MLflow request-auth plugin that sends a Google access token, for MLflow servers behind GCP IAP"
+requires-python = ">=3.9"
+dependencies = ["google-auth[requests]", "mlflow-skinny"]
+
+[project.entry-points."mlflow.request_auth_provider"]
+gcp-iap = "mlflow_iap_auth:GcpIapAuthProvider"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
