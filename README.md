@@ -67,13 +67,14 @@ To open MLflow in your browser, run the last command again with `--member=user:y
 
 </details>
 
-**2. Configure.** Store your settings in a Modal Secret:
+**2. Configure.** Generate the credential config (it contains no secrets) and store the MLflow URL in a Modal Secret:
 
 ```bash
-modal secret create iap-test \
-  WIF_PROVIDER=$POOL/providers/modal \
-  SERVICE_ACCOUNT=$SA \
-  MLFLOW_URL=https://iap-test-mlflow-$PROJECT_NUMBER.$REGION.run.app
+gcloud iam workload-identity-pools create-cred-config $POOL/providers/modal \
+  --service-account=$SA --credential-source-file=/__modal/identity/token \
+  --output-file=gcp_credentials.json
+
+modal secret create iap-test MLFLOW_TRACKING_URI=https://iap-test-mlflow-$PROJECT_NUMBER.$REGION.run.app
 ```
 
 **3. Run.**

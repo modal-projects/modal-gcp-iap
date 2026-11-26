@@ -4,11 +4,8 @@ No service account keys: Modal gives each container a short-lived OIDC token,
 GCP Workload Identity Federation swaps it for a Google token, and the
 container acts as a service account that IAP lets through.
 
-Settings come from the Modal Secret "iap-test" (see README).
+Needs gcp_credentials.json and the Modal Secret "iap-test" (see README).
 """
-
-import json
-import os
 
 import modal
 
@@ -21,44 +18,25 @@ image = (
     .uv_pip_install("mlflow-skinny==3.18.0", "google-auth[requests]")
     .add_local_dir("mlflow_iap_auth", "/pkg/mlflow_iap_auth", copy=True)
     .run_commands("pip install --no-deps /pkg/mlflow_iap_auth")  # registers the MLflow plugin
+    .env(
+        {
+            "GOOGLE_APPLICATION_CREDENTIALS": "/root/gcp_credentials.json",  # Google clients find this
+            "MLFLOW_TRACKING_AUTH": "gcp-iap",  # use the mlflow_iap_auth plugin
+        }
+    )
+    .add_local_file("gcp_credentials.json", "/root/gcp_credentials.json")
 )
-
-
-def use_gcp_workload_identity():
-    """Point Google's default credentials at this container's Modal OIDC token.
-
-    Writes the same config `gcloud iam workload-identity-pools create-cred-config`
-    produces. MODAL_IDENTITY_TOKEN_FILE is refreshed by Modal, so long jobs keep working.
-    """
-    config = {
-        "type": "external_account",
-        "audience": f"//iam.googleapis.com/{os.environ['WIF_PROVIDER']}",
-        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-        "token_url": "https://sts.googleapis.com/v1/token",
-        "credential_source": {"file": os.environ["MODAL_IDENTITY_TOKEN_FILE"]},
-        "service_account_impersonation_url": (
-            "https://iamcredentials.googleapis.com/v1/projects/-/"
-            f"serviceAccounts/{os.environ['SERVICE_ACCOUNT']}:generateAccessToken"
-        ),
-    }
-    with open("/tmp/gcp_wif_config.json", "w") as f:
-        json.dump(config, f)
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcp_wif_config.json"
 
 
 @app.function(image=image, secrets=[modal.Secret.from_name("iap-test")])
 def train(epochs: int = 20):
-    """Pretend to train a model and log metrics to MLflow."""
+    """Pretend to train a model and log metrics to MLflow (at MLFLOW_TRACKING_URI)."""
     import math
     import random
 
     import mlflow
 
-    use_gcp_workload_identity()
-    os.environ["MLFLOW_TRACKING_AUTH"] = "gcp-iap"  # use the mlflow_iap_auth plugin
-    mlflow.set_tracking_uri(os.environ["MLFLOW_URL"])
     mlflow.set_experiment("modal-iap-demo")
-
     with mlflow.start_run():
         mlflow.log_params({"epochs": epochs, "lr": 3e-4, "batch_size": 64})
         for epoch in range(epochs):
